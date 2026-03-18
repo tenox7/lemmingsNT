@@ -57,7 +57,10 @@ typedef struct {
     int exited;
     LemAction action;
     int fallDist;
-    int countdown;
+    int state;
+    int bombTimer;
+    int canClimb;
+    int hasFloat;
 } Lemming;
 
 typedef struct {
@@ -95,6 +98,7 @@ typedef struct {
     int gameOver;
     int skillSel;
     int running;
+    int levelNum;
 } GameState;
 
 extern GameState game;

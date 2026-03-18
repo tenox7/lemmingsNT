@@ -5,6 +5,7 @@
 static HWND hWndMain;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    int mx, my;
     switch (msg) {
     case WM_DESTROY:
         game.running = 0;
@@ -21,12 +22,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_KEYUP:
         gameKeyUp((int)wParam);
         return 0;
-    case WM_LBUTTONDOWN: {
-        int mx = (int)(lParam & 0xFFFF) / 2;
-        int my = (int)((lParam >> 16) & 0xFFFF) / 2;
+    case WM_LBUTTONDOWN:
+        mx = LOWORD(lParam) / 2;
+        my = HIWORD(lParam) / 2;
         gameClick(mx, my);
         return 0;
-    }
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
