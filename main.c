@@ -43,6 +43,19 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdLine, int cmdShow)
     RECT rc;
     DWORD style;
     DWORD lastTick, now, elapsed;
+    SYSTEM_INFO si;
+    char title[64];
+    const char *arch;
+
+    GetSystemInfo(&si);
+    switch (si.wProcessorArchitecture) {
+    case PROCESSOR_ARCHITECTURE_INTEL: arch = "x86"; break;
+    case PROCESSOR_ARCHITECTURE_MIPS:  arch = "MIPS"; break;
+    case PROCESSOR_ARCHITECTURE_ALPHA: arch = "Alpha"; break;
+    case PROCESSOR_ARCHITECTURE_PPC:   arch = "PowerPC"; break;
+    default:                           arch = "Unknown"; break;
+    }
+    wsprintf(title, "%s %s", GAME_TITLE, arch);
 
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = WndProc;
@@ -59,7 +72,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdLine, int cmdShow)
     rc.bottom = SCREEN_H;
     AdjustWindowRect(&rc, style, FALSE);
 
-    hWndMain = CreateWindow(GAME_TITLE, GAME_TITLE, style,
+    hWndMain = CreateWindow(GAME_TITLE, title, style,
                             CW_USEDEFAULT, CW_USEDEFAULT,
                             rc.right - rc.left, rc.bottom - rc.top,
                             NULL, NULL, hInst, NULL);
