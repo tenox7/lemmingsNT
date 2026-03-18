@@ -428,16 +428,11 @@ int levelLoad(int levelNumber, Level *level, LevelInfo *info, RGBQUAD *palette) 
 
     wsprintf(path, "data\\GROUND%dO.DAT", graphicSet);
     {
-        HANDLE hf;
-        DWORD br;
-        hf = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hf == INVALID_HANDLE_VALUE)
+        DWORD sz;
+        BYTE *res = resLoad(path, &sz);
+        if (!res || sz != 1056)
             return 0;
-        ReadFile(hf, groundRaw, 1056, &br, NULL);
-        CloseHandle(hf);
-        if (br != 1056)
-            return 0;
+        memcpy(groundRaw, res, 1056);
     }
 
     parseGroundData(groundRaw, &gd);

@@ -1,4 +1,5 @@
 #include "dat.h"
+#include "resource.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -6,37 +7,53 @@ static WORD readBE16(BYTE *p) {
     return (WORD)((p[0] << 8) | p[1]);
 }
 
+static int pathToResId(const char *path) {
+    const char *name;
+    name = strrchr(path, '\\');
+    if (name) name++; else name = path;
+
+    if (strncmp(name, "LEVEL00", 7) == 0 && name[7] >= '0' && name[7] <= '9')
+        return IDR_LEVEL000 + (name[7] - '0');
+    if (strncmp(name, "GROUND", 6) == 0 && name[6] >= '0' && name[6] <= '4')
+        return IDR_GROUND0O + (name[6] - '0');
+    if (strncmp(name, "VGAGR", 5) == 0 && name[5] >= '0' && name[5] <= '4')
+        return IDR_VGAGR0 + (name[5] - '0');
+    if (strncmp(name, "VGASPEC", 7) == 0 && name[7] >= '0' && name[7] <= '3')
+        return IDR_VGASPEC0 + (name[7] - '0');
+    if (strncmp(name, "MAIN", 4) == 0) return IDR_MAIN;
+    if (strncmp(name, "ODDTABLE", 8) == 0) return IDR_ODDTABLE;
+    if (strncmp(name, "EXPLODE", 7) == 0) return IDR_EXPLODE;
+    return 0;
+}
+
+BYTE *resLoad(const char *path, DWORD *outSize) {
+    int resId = pathToResId(path);
+    HRSRC hRes;
+    HGLOBAL hData;
+
+    if (!resId) { *outSize = 0; return NULL; }
+    hRes = FindResource(GetModuleHandle(NULL), MAKEINTRESOURCE(resId), RT_RCDATA);
+    if (!hRes) { *outSize = 0; return NULL; }
+    *outSize = SizeofResource(GetModuleHandle(NULL), hRes);
+    hData = LoadResource(GetModuleHandle(NULL), hRes);
+    if (!hData) { *outSize = 0; return NULL; }
+    return (BYTE *)LockResource(hData);
+}
+
 int datOpen(DatFile *dat, const char *path) {
-    HANDLE hFile;
-    DWORD fileSize, bytesRead;
+    DWORD fileSize;
+    BYTE *resPtr;
 
     memset(dat, 0, sizeof(DatFile));
 
-    hFile = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
+    resPtr = resLoad(path, &fileSize);
+    if (!resPtr || fileSize == 0)
         return 0;
-
-    fileSize = GetFileSize(hFile, NULL);
-    if (fileSize == 0 || fileSize > 1024 * 1024) {
-        CloseHandle(hFile);
-        return 0;
-    }
 
     dat->data = (BYTE *)GlobalAlloc(GPTR, fileSize);
-    if (!dat->data) {
-        CloseHandle(hFile);
+    if (!dat->data)
         return 0;
-    }
-
-    ReadFile(hFile, dat->data, fileSize, &bytesRead, NULL);
-    CloseHandle(hFile);
-
-    if (bytesRead != fileSize) {
-        GlobalFree(dat->data);
-        dat->data = NULL;
-        return 0;
-    }
+    memcpy(dat->data, resPtr, fileSize);
 
     dat->length = (int)fileSize;
     dat->numParts = 0;

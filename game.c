@@ -2,7 +2,7 @@
 #include "render.h"
 #include "level.h"
 #include "sprite.h"
-#include <stdio.h>
+#include "dat.h"
 
 GameState game;
 
@@ -58,11 +58,11 @@ static int loadLevel(HWND hwnd, int num) {
 }
 
 static int loadParticleData(int dummy) {
-    FILE *fp = fopen("data\\EXPLODE.DAT", "rb");
-    if (!fp)
+    DWORD sz;
+    BYTE *res = resLoad("data\\EXPLODE.DAT", &sz);
+    if (!res || sz < sizeof(particleData))
         return 0;
-    fread(particleData, 1, sizeof(particleData), fp);
-    fclose(fp);
+    memcpy(particleData, res, sizeof(particleData));
     particleLoaded = 1;
     return 1;
 }

@@ -24,5 +24,6 @@ typedef struct {
 int datOpen(DatFile *dat, const char *path);
 int datClose(DatFile *dat);
 int datDecompress(DatFile *dat, int partIndex, BYTE *out, int outSize);
+BYTE *resLoad(const char *path, DWORD *outSize);
 
 #endif /* DAT_H_INCLUDED */
