@@ -4,7 +4,7 @@
 #include <windows.h>
 
 #define DAT_MAX_PARTS 32
-#define DAT_MAX_DECOMP 65536
+#define DAT_MAX_DECOMP 131072
 
 typedef struct {
     int initialBufLen;

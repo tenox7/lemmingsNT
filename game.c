@@ -213,6 +213,7 @@ int gameClick(int mx, int my) {
 }
 
 static int drawChar(BYTE *buf, int px, int py, char ch, BYTE color);
+static int updateObjects(int dummy);
 
 static int removeTerrain(int x, int y) {
     int idx;
@@ -636,6 +637,8 @@ int gameUpdate(HWND hwnd) {
         spawnLemming(0);
     }
 
+    updateObjects(0);
+
     for (i = 0; i < game.numLems; i++)
         updateLemming(&game.lems[i]);
 
@@ -898,6 +901,64 @@ static int drawPanel(BYTE *buf) {
     return 1;
 }
 
+static int drawObjects(BYTE *buf, int camX) {
+    int i;
+    for (i = 0; i < game.level.numObjs; i++) {
+        PlacedObj *po = &game.level.objs[i];
+        ObjSpriteData *spr = levelGetObjSprite(po->objId);
+        int fx, fy, screenX, screenY;
+        BYTE *pixels;
+
+        if (!spr || spr->numFrames <= 0)
+            continue;
+
+        pixels = spr->pixels[po->frame % spr->numFrames];
+        screenX = po->x - camX;
+        screenY = po->y;
+
+        for (fy = 0; fy < spr->height; fy++) {
+            int dy = screenY + fy;
+            if (dy < 0 || dy >= LEVEL_H)
+                continue;
+            for (fx = 0; fx < spr->width; fx++) {
+                int dx = screenX + fx;
+                BYTE pixel;
+                if (dx < 0 || dx >= GAME_W)
+                    continue;
+                pixel = pixels[fy * spr->width + fx];
+                if (pixel & 0x80)
+                    continue;
+                buf[dy * GAME_W + dx] = pixel;
+            }
+        }
+    }
+    return 1;
+}
+
+static int updateObjects(int dummy) {
+    int i;
+    for (i = 0; i < game.level.numObjs; i++) {
+        PlacedObj *po = &game.level.objs[i];
+        ObjSpriteData *spr = levelGetObjSprite(po->objId);
+
+        if (!spr || spr->numFrames <= 1 || po->animDone)
+            continue;
+
+        switch (spr->animType) {
+        case OBJ_ANIM_CONTINUOUS:
+            po->frame = (po->frame + 1) % spr->numFrames;
+            break;
+        case OBJ_ANIM_ONCE:
+            if (po->frame < spr->numFrames - 1)
+                po->frame++;
+            else
+                po->animDone = 1;
+            break;
+        }
+    }
+    return 1;
+}
+
 int gameRender(HWND hwnd) {
     BYTE *buf;
     int x, y, i;
@@ -910,11 +971,18 @@ int gameRender(HWND hwnd) {
         return 1;
 
     camX = game.cameraX;
+
+    drawObjects(buf, camX);
+
     for (y = 0; y < LEVEL_H && y < GAME_H; y++)
         for (x = 0; x < GAME_W; x++) {
             int srcX = camX + x;
-            if (srcX >= 0 && srcX < LEVEL_W)
-                buf[y * GAME_W + x] = game.level.visual[y * LEVEL_W + srcX];
+            BYTE pixel;
+            if (srcX < 0 || srcX >= LEVEL_W)
+                continue;
+            pixel = game.level.visual[y * LEVEL_W + srcX];
+            if (pixel)
+                buf[y * GAME_W + x] = pixel;
         }
 
     for (i = 0; i < game.numLems; i++)

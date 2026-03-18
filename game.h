@@ -77,11 +77,20 @@ typedef struct {
 } LevelInfo;
 
 typedef struct {
+    int x, y;
+    int objId;
+    int frame;
+    int animDone;
+} PlacedObj;
+
+typedef struct {
     BYTE terrain[LEVEL_W * LEVEL_H];
     BYTE visual[LEVEL_W * LEVEL_H];
     LevelInfo info;
     Trigger triggers[MAX_TRIGGERS];
     int numTriggers;
+    PlacedObj objs[MAX_OBJECTS];
+    int numObjs;
 } Level;
 
 typedef struct {

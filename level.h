@@ -64,6 +64,22 @@ typedef struct {
 #define MAX_LEVEL_OBJECTS 32
 #define MAX_LEVEL_STEEL 32
 
+#define MAX_OBJ_DIM 64
+#define MAX_OBJ_AFRAMES 16
+
+#define OBJ_ANIM_NONE       0
+#define OBJ_ANIM_TRIGGERED  1
+#define OBJ_ANIM_CONTINUOUS 2
+#define OBJ_ANIM_ONCE       3
+
+typedef struct {
+    BYTE pixels[MAX_OBJ_AFRAMES][MAX_OBJ_DIM * MAX_OBJ_DIM];
+    int width, height;
+    int numFrames;
+    int animType;
+} ObjSpriteData;
+
 int levelLoad(int levelNumber, Level *level, LevelInfo *info, RGBQUAD *palette);
+ObjSpriteData *levelGetObjSprite(int objId);
 
 #endif /* LEVEL_H_INCLUDED */

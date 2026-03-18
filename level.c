@@ -2,6 +2,8 @@
 #include "dat.h"
 #include <string.h>
 
+static ObjSpriteData objSprites[MAX_GROUND_OBJECTS];
+
 static WORD rdBE16(BYTE *p) {
     return (WORD)((p[0] << 8) | p[1]);
 }
@@ -194,6 +196,86 @@ static int placeTerrain(Level *level, GroundData *gd,
     return 1;
 }
 
+static int decodeObjFrame(BYTE *vga, int vgaLen, int offset, int maskOfs,
+                           int w, int h, BYTE *pixels) {
+    int pixCount = w * h;
+    int plane, srcPos, bitBufLen, bitBuf, px;
+
+    memset(pixels, 0, pixCount);
+    srcPos = offset;
+
+    for (plane = 0; plane < 4; plane++) {
+        bitBufLen = 0;
+        bitBuf = 0;
+        for (px = 0; px < pixCount; px++) {
+            if (bitBufLen <= 0) {
+                if (srcPos >= vgaLen)
+                    return 0;
+                bitBuf = vga[srcPos++];
+                bitBufLen = 8;
+            }
+            pixels[px] |= (BYTE)(((bitBuf & 0x80) >> (7 - plane)));
+            bitBuf <<= 1;
+            bitBufLen--;
+        }
+    }
+
+    srcPos = offset + maskOfs;
+    bitBufLen = 0;
+    bitBuf = 0;
+    for (px = 0; px < pixCount; px++) {
+        if (bitBufLen <= 0) {
+            if (srcPos >= vgaLen)
+                break;
+            bitBuf = vga[srcPos++];
+            bitBufLen = 8;
+        }
+        if (!(bitBuf & 0x80))
+            pixels[px] |= 0x80;
+        bitBuf <<= 1;
+        bitBufLen--;
+    }
+
+    return 1;
+}
+
+static int decodeObjSprites(GroundData *gd, BYTE *vga, int vgaLen) {
+    int i, f;
+
+    memset(objSprites, 0, sizeof(objSprites));
+
+    for (i = 0; i < MAX_GROUND_OBJECTS; i++) {
+        ObjectMeta *m = &gd->objects[i];
+        ObjSpriteData *s = &objSprites[i];
+
+        s->width = m->width;
+        s->height = m->height;
+        s->numFrames = m->frameCount;
+        s->animType = m->flags & 3;
+
+        if (m->frameCount <= 0 || m->width <= 0 || m->height <= 0)
+            continue;
+        if (m->width > MAX_OBJ_DIM || m->height > MAX_OBJ_DIM)
+            continue;
+        if (m->frameCount > MAX_OBJ_AFRAMES)
+            s->numFrames = MAX_OBJ_AFRAMES;
+
+        for (f = 0; f < s->numFrames; f++) {
+            int fOfs = m->imageLoc + f * m->frameDataSize;
+            decodeObjFrame(vga, vgaLen, fOfs, m->maskLoc,
+                           m->width, m->height, s->pixels[f]);
+        }
+    }
+
+    return 1;
+}
+
+ObjSpriteData *levelGetObjSprite(int objId) {
+    if (objId < 0 || objId >= MAX_GROUND_OBJECTS)
+        return NULL;
+    return &objSprites[objId];
+}
+
 static int parseLevelInfo(BYTE *raw, LevelInfo *info) {
     int i;
 
@@ -250,12 +332,14 @@ static int parseLevelObjects(BYTE *rawLevel, GroundData *gd, Level *level,
     BYTE *p;
 
     level->numTriggers = 0;
+    level->numObjs = 0;
     *ex = 0;
     *ey = 0;
 
     for (i = 0; i < MAX_LEVEL_OBJECTS; i++) {
         int ox, oy, oid, flags;
         ObjectMeta *meta;
+        PlacedObj *po;
         p = rawLevel + 0x20 + i * 8;
         ox = (int)((p[0] << 8) | p[1]) - 16;
         oy = (int)((p[2] << 8) | p[3]);
@@ -271,6 +355,16 @@ static int parseLevelObjects(BYTE *rawLevel, GroundData *gd, Level *level,
         if (oid == 1) {
             *ex = ox + 24;
             *ey = oy + 14;
+        }
+
+        if (level->numObjs < MAX_OBJECTS) {
+            po = &level->objs[level->numObjs];
+            po->x = ox;
+            po->y = oy;
+            po->objId = oid;
+            po->frame = 0;
+            po->animDone = 0;
+            level->numObjs++;
         }
 
         if (meta->triggerEffect != 0 && level->numTriggers < MAX_TRIGGERS) {
@@ -302,7 +396,7 @@ int levelLoad(int levelNumber, Level *level, LevelInfo *info, RGBQUAD *palette) 
     int graphicSet;
     int fileNum, levelInFile;
     char path[260];
-    int totalVgaSize, pi;
+    int totalVgaSize, pi, vgaObjBase;
     int orderVal;
 
     memset(level, 0, sizeof(Level));
@@ -353,11 +447,14 @@ int levelLoad(int levelNumber, Level *level, LevelInfo *info, RGBQUAD *palette) 
         return 0;
 
     totalVgaSize = 0;
+    vgaObjBase = 0;
     for (pi = 0; pi < vgaDat.numParts; pi++) {
         int partSize = datDecompress(&vgaDat, pi, vgaRaw + totalVgaSize,
                                       sizeof(vgaRaw) - totalVgaSize);
         if (partSize <= 0)
             break;
+        if (pi == 0)
+            vgaObjBase = partSize;
         totalVgaSize += partSize;
     }
     datClose(&vgaDat);
@@ -366,6 +463,7 @@ int levelLoad(int levelNumber, Level *level, LevelInfo *info, RGBQUAD *palette) 
         return 0;
 
     placeTerrain(level, &gd, vgaRaw, totalVgaSize, levelRaw);
+    decodeObjSprites(&gd, vgaRaw + vgaObjBase, totalVgaSize - vgaObjBase);
     parseSteel(levelRaw, level);
 
     info->entranceX = info->startX + GAME_W / 2;
