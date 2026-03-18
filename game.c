@@ -12,6 +12,18 @@ static BYTE keyState[256];
 static int spawnX = 0;
 static int spawnY = 0;
 
+#define PARTICLE_COUNT 80
+#define PARTICLE_FRAMES 51
+static signed char particleData[PARTICLE_FRAMES][PARTICLE_COUNT * 2];
+static int particleLoaded = 0;
+static const BYTE particleColors[16] = {
+    4, 15, 14, 13, 12, 11, 10, 9, 8, 11, 10, 9, 8, 7, 6, 2
+};
+
+#define EXPLODE_OHNO  0
+#define EXPLODE_BOOM  1
+#define EXPLODE_PARTS 2
+
 static const char *skillNames[8] = {
     "CLIMB","FLOAT","BOMB","BLOCK","BUILD","BASH","MINE","DIG"
 };
@@ -45,6 +57,16 @@ static int loadLevel(HWND hwnd, int num) {
     return 1;
 }
 
+static int loadParticleData(int dummy) {
+    FILE *fp = fopen("data\\EXPLODE.DAT", "rb");
+    if (!fp)
+        return 0;
+    fread(particleData, 1, sizeof(particleData), fp);
+    fclose(fp);
+    particleLoaded = 1;
+    return 1;
+}
+
 int gameInit(HWND hwnd) {
     memset(&game, 0, sizeof(GameState));
     memset(keyState, 0, sizeof(keyState));
@@ -55,6 +77,7 @@ int gameInit(HWND hwnd) {
         return 0;
 
     spriteInit(0);
+    loadParticleData(0);
     loadLevel(hwnd, 0);
     return 1;
 }
@@ -296,7 +319,7 @@ static int bashColumn(int x, int y, int dir) {
 }
 
 static int updateLemming(Lemming *l) {
-    int i, upDelta, downDelta;
+    int i, upDelta, downDelta, wasFalling;
 
     if (!l->alive || l->exited)
         return 0;
@@ -306,31 +329,11 @@ static int updateLemming(Lemming *l) {
     if (l->bombTimer > 0) {
         l->bombTimer--;
         if (l->bombTimer <= 0 && l->action != ACT_EXPLODE) {
+            wasFalling = (l->action == ACT_FALL || l->action == ACT_FLOAT);
             l->action = ACT_EXPLODE;
             l->frame = 0;
-            l->bombTimer = -50;
-        }
-    }
-    if (l->bombTimer < 0) {
-        l->bombTimer++;
-        if (l->bombTimer == -25) {
-            int ex, ey;
-            int cx = l->x;
-            int cy = l->y - 3;
-            int rx = 8;
-            int ry = 11;
-            for (ey = cy - ry; ey <= cy + ry; ey++)
-                for (ex = cx - rx; ex <= cx + rx; ex++) {
-                    int dx = ex - cx;
-                    int dy = (ey - cy) * rx / ry;
-                    if (dx * dx + dy * dy <= rx * rx)
-                        removeTerrain(ex, ey);
-                }
-        }
-        if (l->bombTimer >= 0) {
-            l->alive = 0;
-            game.numDead++;
-            return 0;
+            l->state = wasFalling ? EXPLODE_BOOM : EXPLODE_OHNO;
+            l->bombTimer = 0;
         }
     }
 
@@ -546,6 +549,38 @@ static int updateLemming(Lemming *l) {
         break;
 
     case ACT_EXPLODE:
+        switch (l->state) {
+        case EXPLODE_OHNO:
+            if (l->frame >= 16) {
+                l->state = EXPLODE_BOOM;
+                l->frame = 0;
+            }
+            break;
+        case EXPLODE_BOOM: {
+            int ex, ey;
+            int cx = l->x;
+            int cy = l->y - 3;
+            int rx = 8;
+            int ry = 11;
+            for (ey = cy - ry; ey <= cy + ry; ey++)
+                for (ex = cx - rx; ex <= cx + rx; ex++) {
+                    int ddx = ex - cx;
+                    int ddy = (ey - cy) * rx / ry;
+                    if (ddx * ddx + ddy * ddy <= rx * rx)
+                        removeTerrain(ex, ey);
+                }
+            l->state = EXPLODE_PARTS;
+            l->frame = 0;
+            break;
+        }
+        case EXPLODE_PARTS:
+            if (l->frame >= PARTICLE_FRAMES) {
+                l->alive = 0;
+                game.numDead++;
+                return 0;
+            }
+            break;
+        }
         break;
 
     case ACT_EXIT:
@@ -653,7 +688,29 @@ static int drawLemming(BYTE *buf, Lemming *l, int camX) {
         animId = ANIM_BLOCK;
         break;
     case ACT_EXPLODE:
-        if (l->bombTimer <= -25)
+        if (l->state == EXPLODE_PARTS) {
+            int pi, pf;
+            int scrX = l->x - camX;
+            int scrY = l->y;
+            signed char *frame;
+            pf = l->frame;
+            if (pf < 0) pf = 0;
+            if (pf >= PARTICLE_FRAMES) pf = PARTICLE_FRAMES - 1;
+            frame = particleData[pf];
+            for (pi = 0; pi < PARTICLE_COUNT; pi++) {
+                int px = frame[pi * 2];
+                int py = frame[pi * 2 + 1];
+                int dx, dy;
+                if (px == -128 && py == -128)
+                    continue;
+                dx = scrX + px;
+                dy = scrY + py;
+                if (dx >= 0 && dx < GAME_W && dy >= 0 && dy < LEVEL_H)
+                    buf[dy * GAME_W + dx] = particleColors[pi % 16];
+            }
+            return 1;
+        }
+        if (l->state == EXPLODE_OHNO)
             animId = ANIM_OHNO;
         else
             animId = ANIM_EXPLODE;
