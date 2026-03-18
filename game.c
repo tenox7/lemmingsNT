@@ -163,15 +163,6 @@ int gameClick(int mx, int my) {
     int worldY = my;
     int i, bestI, bestDist;
 
-    {
-        FILE *fp = fopen("click.log", "a");
-        if (fp) {
-            fprintf(fp, "mx=%d my=%d worldX=%d sel=%d nlems=%d\n",
-                    mx, my, worldX, game.skillSel, game.numLems);
-            fclose(fp);
-        }
-    }
-
     if (my >= LEVEL_H) {
         int panelIdx = mx / 16;
         if (panelIdx >= 2 && panelIdx <= 9)
@@ -197,18 +188,8 @@ int gameClick(int mx, int my) {
         }
     }
 
-    if (bestI >= 0) {
-        int ok = assignSkill(&game.lems[bestI], game.skillSel);
-        {
-            FILE *fp = fopen("click.log", "a");
-            if (fp) {
-                fprintf(fp, "click lem=%d skill=%d ok=%d act=%d bomb=%d\n",
-                        bestI, game.skillSel, ok,
-                        game.lems[bestI].action, game.lems[bestI].bombTimer);
-                fclose(fp);
-            }
-        }
-    }
+    if (bestI >= 0)
+        assignSkill(&game.lems[bestI], game.skillSel);
     return 1;
 }
 
@@ -441,8 +422,8 @@ static int updateLemming(Lemming *l) {
         break;
 
     case ACT_BASH: {
-        int state = l->frame % 16;
-        if (state >= 11) {
+        int bstate = l->frame % 16;
+        if (bstate >= 11) {
             l->x += l->dx;
             downDelta = getStepDown(l->x, l->y);
             l->y += downDelta;
@@ -453,12 +434,19 @@ static int updateLemming(Lemming *l) {
                 break;
             }
         }
-        if (state >= 2 && state < 6) {
-            int bx;
-            for (bx = -1; bx <= 1; bx++)
-                bashColumn(l->x + l->dx * (4 + state + bx), l->y, l->dx);
+        if (bstate >= 2 && bstate <= 5) {
+            int btype = (l->dx > 0) ? MASK_BASH_R : MASK_BASH_L;
+            BYTE *mask = spriteGetMask(btype, bstate - 2);
+            int ox = l->x - 8;
+            int oy = l->y - 10;
+            int mx, my;
+            if (mask)
+                for (my = 0; my < 10; my++)
+                    for (mx = 0; mx < 16; mx++)
+                        if (mask[my * 16 + mx])
+                            removeTerrain(ox + mx, oy + my);
         }
-        if (state == 5) {
+        if (bstate == 5) {
             int checkX = l->x + l->dx * 8;
             int empty = 1;
             for (i = -2; i < 4; i++) {
@@ -476,17 +464,43 @@ static int updateLemming(Lemming *l) {
     }
 
     case ACT_MINE: {
-        int state = l->frame % 24;
-        if (state >= 1 && state <= 2) {
-            int mx, my;
-            for (my = l->y - 3; my <= l->y + 1; my++)
-                for (mx = l->x - 2; mx <= l->x + 2; mx++)
-                    removeTerrain(mx + l->dx * 3, my);
-        }
-        if (state == 15) {
-            l->x += l->dx;
+        int mstate = l->frame % 24;
+        int mtype, mx, my;
+        BYTE *mask;
+
+        if (mstate == 0) {
             l->y++;
-            if (l->y >= LEVEL_H || !terrainAt(l->x + l->dx, l->y + 1)) {
+            if (l->y > LEVEL_H) { l->alive = 0; game.numDead++; return 0; }
+        }
+
+        if (mstate == 1) {
+            mtype = (l->dx > 0) ? MASK_MINE_R : MASK_MINE_L;
+            mask = spriteGetMask(mtype, 0);
+            if (mask)
+                for (my = 0; my < 13; my++)
+                    for (mx = 0; mx < 16; mx++)
+                        if (mask[my * 16 + mx])
+                            removeTerrain(l->x - 8 + mx, l->y - 13 + my);
+        }
+
+        if (mstate == 2) {
+            mtype = (l->dx > 0) ? MASK_MINE_R : MASK_MINE_L;
+            mask = spriteGetMask(mtype, 1);
+            if (mask)
+                for (my = 0; my < 13; my++)
+                    for (mx = 0; mx < 16; mx++)
+                        if (mask[my * 16 + mx])
+                            removeTerrain(l->x + l->dx - 8 + mx, l->y - 12 + my);
+        }
+
+        if (mstate == 3 || mstate == 15) {
+            l->x += l->dx;
+            l->x += l->dx;
+            if (mstate == 3) {
+                l->y++;
+                if (l->y > LEVEL_H) { l->alive = 0; game.numDead++; return 0; }
+            }
+            if (!terrainAt(l->x, l->y)) {
                 l->action = ACT_FALL;
                 l->frame = 0;
                 l->fallDist = 0;
@@ -558,18 +572,15 @@ static int updateLemming(Lemming *l) {
             }
             break;
         case EXPLODE_BOOM: {
-            int ex, ey;
-            int cx = l->x;
-            int cy = l->y - 3;
-            int rx = 8;
-            int ry = 11;
-            for (ey = cy - ry; ey <= cy + ry; ey++)
-                for (ex = cx - rx; ex <= cx + rx; ex++) {
-                    int ddx = ex - cx;
-                    int ddy = (ey - cy) * rx / ry;
-                    if (ddx * ddx + ddy * ddy <= rx * rx)
-                        removeTerrain(ex, ey);
-                }
+            BYTE *mask = spriteGetMask(MASK_EXPLODE, 0);
+            int ox = l->x - 8;
+            int oy = l->y - 14;
+            int mx, my;
+            if (mask)
+                for (my = 0; my < 22; my++)
+                    for (mx = 0; mx < 16; mx++)
+                        if (mask[my * 16 + mx])
+                            removeTerrain(ox + mx, oy + my);
             l->state = EXPLODE_PARTS;
             l->frame = 0;
             break;

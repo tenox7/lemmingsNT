@@ -6,6 +6,33 @@ static Animation anims[ANIM_COUNT];
 static BYTE panelPixels[320 * 40];
 static int panelLoaded = 0;
 
+static BYTE maskBashR[4][16 * 10];
+static BYTE maskBashL[4][16 * 10];
+static BYTE maskMineR[2][16 * 13];
+static BYTE maskMineL[2][16 * 13];
+static BYTE maskExplode[16 * 22];
+
+static int decodeMask(BYTE *src, int srcLen, int offset,
+                       int w, int h, BYTE *dest) {
+    int pixCount = w * h;
+    int srcPos = offset;
+    int bitBuf = 0, bitBufLen = 0;
+    int px;
+
+    for (px = 0; px < pixCount; px++) {
+        if (bitBufLen <= 0) {
+            if (srcPos >= srcLen)
+                return 0;
+            bitBuf = src[srcPos++];
+            bitBufLen = 8;
+        }
+        dest[px] = (bitBuf & 0x80) ? 1 : 0;
+        bitBuf <<= 1;
+        bitBufLen--;
+    }
+    return 1;
+}
+
 static int decodeAnim(BYTE *data, int dataLen, int offset,
                        int w, int h, int bpp, int numFrames,
                        Animation *anim) {
@@ -123,6 +150,16 @@ int spriteInit(int dummy) {
         anims[ANIM_EXPLODE].footY = 25;
     }
 
+    size = datDecompress(&mainDat, 1, data, sizeof(data));
+    if (size > 0) {
+        int ofs = 0, f;
+        for (f = 0; f < 4; f++) { decodeMask(data, size, ofs, 16, 10, maskBashR[f]); ofs += 20; }
+        for (f = 0; f < 4; f++) { decodeMask(data, size, ofs, 16, 10, maskBashL[f]); ofs += 20; }
+        for (f = 0; f < 2; f++) { decodeMask(data, size, ofs, 16, 13, maskMineR[f]); ofs += 26; }
+        for (f = 0; f < 2; f++) { decodeMask(data, size, ofs, 16, 13, maskMineL[f]); ofs += 26; }
+        decodeMask(data, size, ofs, 16, 22, maskExplode);
+    }
+
     size = datDecompress(&mainDat, 6, data, sizeof(data));
     if (size > 0)
         decodePanel(data, size);
@@ -141,4 +178,15 @@ BYTE *spriteGetPanel(int dummy) {
     if (!panelLoaded)
         return NULL;
     return panelPixels;
+}
+
+BYTE *spriteGetMask(int type, int frame) {
+    switch (type) {
+    case MASK_BASH_R:  return maskBashR[frame & 3];
+    case MASK_BASH_L:  return maskBashL[frame & 3];
+    case MASK_MINE_R:  return maskMineR[frame & 1];
+    case MASK_MINE_L:  return maskMineL[frame & 1];
+    case MASK_EXPLODE: return maskExplode;
+    }
+    return NULL;
 }

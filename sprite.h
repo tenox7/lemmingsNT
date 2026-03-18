@@ -43,8 +43,15 @@ typedef struct {
     int footY;
 } Animation;
 
+#define MASK_BASH_R   0
+#define MASK_BASH_L   1
+#define MASK_MINE_R   2
+#define MASK_MINE_L   3
+#define MASK_EXPLODE  4
+
 int spriteInit(int dummy);
 Animation *spriteGetAnim(int animId);
 BYTE *spriteGetPanel(int dummy);
+BYTE *spriteGetMask(int type, int frame);
 
 #endif /* SPRITE_H_INCLUDED */
