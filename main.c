@@ -27,6 +27,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         my = HIWORD(lParam) / 2;
         gameClick(mx, my);
         return 0;
+    case WM_QUERYNEWPALETTE:
+        return renderRealizePalette(hwnd);
+    case WM_PALETTECHANGED:
+        if ((HWND)wParam != hwnd)
+            renderRealizePalette(hwnd);
+        return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }

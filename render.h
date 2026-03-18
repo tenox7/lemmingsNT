@@ -11,5 +11,7 @@ int renderSetPixel(int x, int y, BYTE color);
 int renderClear(BYTE color);
 BYTE *renderGetBuffer(int dummy);
 int renderSetPalette(RGBQUAD *colors, int start, int count);
+int renderCreatePalette(HWND hwnd);
+int renderRealizePalette(HWND hwnd);
 
 #endif

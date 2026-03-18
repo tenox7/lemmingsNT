@@ -5,6 +5,7 @@ static HBITMAP hBitmap;
 static HDC memDC;
 static BYTE *pixels;
 static char bmpInfoBuf[sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD)];
+static HPALETTE hPalette = NULL;
 
 int renderInit(HWND hwnd) {
     HDC hdc;
@@ -59,6 +60,7 @@ int renderInit(HWND hwnd) {
 }
 
 int renderShutdown(HWND hwnd) {
+    if (hPalette) DeleteObject(hPalette);
     if (memDC) DeleteDC(memDC);
     if (hBitmap) DeleteObject(hBitmap);
     return 1;
@@ -91,15 +93,69 @@ int renderSetPalette(RGBQUAD *colors, int start, int count) {
     return 1;
 }
 
+int renderCreatePalette(HWND hwnd) {
+    HDC hdc;
+    HPALETTE hOld;
+    char buf[sizeof(LOGPALETTE) + 255 * sizeof(PALETTEENTRY)];
+    LOGPALETTE *lp = (LOGPALETTE *)buf;
+    int i;
+
+    lp->palVersion = 0x300;
+    lp->palNumEntries = 256;
+    for (i = 0; i < 256; i++) {
+        lp->palPalEntry[i].peRed = bmpInfo->bmiColors[i].rgbRed;
+        lp->palPalEntry[i].peGreen = bmpInfo->bmiColors[i].rgbGreen;
+        lp->palPalEntry[i].peBlue = bmpInfo->bmiColors[i].rgbBlue;
+        lp->palPalEntry[i].peFlags = PC_NOCOLLAPSE;
+    }
+
+    if (hPalette)
+        DeleteObject(hPalette);
+    hPalette = CreatePalette(lp);
+    if (!hPalette)
+        return 0;
+
+    hdc = GetDC(hwnd);
+    hOld = SelectPalette(hdc, hPalette, FALSE);
+    RealizePalette(hdc);
+    SelectPalette(hdc, hOld, FALSE);
+    ReleaseDC(hwnd, hdc);
+    return 1;
+}
+
+int renderRealizePalette(HWND hwnd) {
+    HDC hdc;
+    HPALETTE hOld;
+    int changed;
+
+    if (!hPalette)
+        return 0;
+    hdc = GetDC(hwnd);
+    hOld = SelectPalette(hdc, hPalette, FALSE);
+    changed = RealizePalette(hdc);
+    SelectPalette(hdc, hOld, FALSE);
+    ReleaseDC(hwnd, hdc);
+    if (changed)
+        InvalidateRect(hwnd, NULL, FALSE);
+    return changed;
+}
+
 int renderFrame(HWND hwnd) {
     HDC hdc;
     RECT rc;
+    HPALETTE hOld = NULL;
 
     hdc = GetDC(hwnd);
+    if (hPalette) {
+        hOld = SelectPalette(hdc, hPalette, FALSE);
+        RealizePalette(hdc);
+    }
     GetClientRect(hwnd, &rc);
     StretchDIBits(hdc, 0, 0, rc.right, rc.bottom,
                   0, 0, GAME_W, GAME_H,
                   pixels, bmpInfo, DIB_RGB_COLORS, SRCCOPY);
+    if (hOld)
+        SelectPalette(hdc, hOld, FALSE);
     ReleaseDC(hwnd, hdc);
     return 1;
 }

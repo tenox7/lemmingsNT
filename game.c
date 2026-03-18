@@ -46,6 +46,7 @@ static int loadLevel(HWND hwnd, int num) {
         return 0;
 
     renderSetPalette(levelPalette, 0, 16);
+    renderCreatePalette(hwnd);
     game.cameraX = game.level.info.startX;
     if (game.cameraX > LEVEL_W - GAME_W)
         game.cameraX = LEVEL_W - GAME_W;
